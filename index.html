@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Accurate Clock - Single File</title>
+    <title>Accurate Clock with Beep</title>
     
     <style>
         /* Basic reset and background */
@@ -13,85 +13,183 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: #fff; /* Dark background */
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #367788; /* Light blue text color */
+            background-color: #f8fafc; /* Clean light background */
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: #334155;
         }
 
         /* Container for alignment */
         .container {
             text-align: center;
+            max-width: 90%;
         }
 
         /* Styling for the clock display */
         #clock {
-            font-size: 6rem; /* Large font size */
-            font-weight: bold;
-            letter-spacing: 5px;
-            padding: 20px 40px;
-            border: 5px solid #367788;
-            border-radius: 15px;
-            box-shadow: 0 0 30px rgba(97, 218, 251, 0.5); /* Glowing effect */
-            transition: transform 0.3s ease;
+            font-size: clamp(3rem, 15vw, 6rem); /* Responsive font size */
+            font-weight: 800;
+            letter-spacing: 2px;
+            padding: 2rem 3rem;
+            background: white;
+            color: #0891b2; /* Cyan-600 */
+            border: 4px solid #0891b2;
+            border-radius: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: default;
         }
 
-        /* Optional: a subtle hover effect */
         #clock:hover {
-            transform: scale(1.02);
+            transform: translateY(-5px);
+            box-shadow: 0 25px 30px -5px rgba(8, 145, 178, 0.2);
+        }
+
+        /* Controls styling */
+        .controls {
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        button {
+            background-color: #0891b2;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background-color: #0e7490;
+        }
+
+        button.muted {
+            background-color: #64748b;
         }
 
         /* Styling for the info text */
         .gmt-info {
-            margin-top: 20px;
-            font-size: 1rem;
-            color: #a0a0a0; /* Gray text */
+            font-size: 0.875rem;
+            color: #64748b;
+            margin: 0;
         }
 
-        /* Media query for smaller screens (e.g., phones) */
-        @media (max-width: 600px) {
-            #clock {
-                font-size: 4rem;
-            }
+        .status-dot {
+            height: 8px;
+            width: 8px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.active {
+            background-color: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="clock">00:00:00</div>
-        <p class="gmt-info">Time based on your device's clock</p>
+        
+        <div class="controls">
+            <button id="soundToggle" class="muted">
+                <span id="statusIcon" class="status-dot"></span>
+                <span id="buttonText">Enable Sound</span>
+            </button>
+            <p class="gmt-info">Audio requires one click to start due to browser policies.</p>
+        </div>
     </div>
     
     <script>
+        let audioCtx = null;
+        let isMuted = true;
+        const clockElement = document.getElementById('clock');
+        const soundToggle = document.getElementById('soundToggle');
+        const buttonText = document.getElementById('buttonText');
+        const statusIcon = document.getElementById('statusIcon');
+
+        // Function to create a short beep using Web Audio API
+        function playBeep() {
+            if (isMuted || !audioCtx) return;
+
+            // Resume context if it was suspended (common in some browsers)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.type = 'sine'; // Soft beep
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+
+            // Envelope to prevent "clicking" sound
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
         // Function to update the clock display
         function updateClock() {
-            // 1. Get the current time from the user's system
             const now = new Date();
 
-            // 2. Extract hours, minutes, and seconds
-            let hours = now.getHours();
-            let minutes = now.getMinutes();
-            let seconds = now.getSeconds();
+            let hours = String(now.getHours()).padStart(2, '0');
+            let minutes = String(now.getMinutes()).padStart(2, '0');
+            let seconds = String(now.getSeconds()).padStart(2, '0');
 
-            // 3. Format the time: Pad single digits with a leading zero
-            // Example: 5 -> "05"
-            hours = String(hours).padStart(2, '0');
-            minutes = String(minutes).padStart(2, '0');
-            seconds = String(seconds).padStart(2, '0');
-
-            // 4. Create the final time string (HH:MM:SS)
             const timeString = `${hours}:${minutes}:${seconds}`;
 
-            // 5. Update the content of the HTML element
-            const clockElement = document.getElementById('clock');
             if (clockElement) {
                 clockElement.textContent = timeString;
             }
+
+            // Play beep every time the clock updates
+            playBeep();
         }
 
-        // Initial call to display the time immediately when the page loads
+        // Audio initialization on user interaction
+        soundToggle.addEventListener('click', () => {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isMuted = !isMuted;
+            
+            if (isMuted) {
+                soundToggle.classList.add('muted');
+                buttonText.textContent = "Enable Sound";
+                statusIcon.classList.remove('active');
+            } else {
+                soundToggle.classList.remove('muted');
+                buttonText.textContent = "Mute Sound";
+                statusIcon.classList.add('active');
+                
+                // Play a test beep immediately
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                playBeep();
+            }
+        });
+
+        // Initial call
         updateClock();
 
-        // Set up an interval to call the updateClock function every 1000 milliseconds (1 second)
+        // Interval to call the updateClock function every second
         setInterval(updateClock, 1000);
     </script>
 </body>
